@@ -1,31 +1,46 @@
 import os
-import threading
-import time
-from flask import Flask, jsonify
+import requests
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-def clawbot_loop():
-    # This is your bot loop. We'll plug in your real logic later.
-    while True:
-        try:
-            print("Clawbot tick...")
-            time.sleep(30)
-        except Exception as e:
-            print("Clawbot error:", repr(e))
-            time.sleep(10)
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-@app.get("/")
-def home():
-    return jsonify(status="ok", service="clawbot")
+# ---- Helper: Send message ----
+def send_message(chat_id, text):
+    url = f"{BASE_URL}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
+    requests.post(url, json=payload)
 
-@app.get("/health")
+# ---- Telegram Webhook Endpoint ----
+@app.route("/telegram", methods=["POST"])
+def telegram_webhook():
+    data = request.get_json()
+
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "")
+
+        # Basic assistant logic
+        if text.lower() == "ping":
+            send_message(chat_id, "pong")
+        else:
+            send_message(chat_id, f"You said: {text}")
+
+    return jsonify(success=True)
+
+@app.route("/health")
 def health():
     return jsonify(status="healthy")
 
-def start_bot():
-    t = threading.Thread(target=clawbot_loop, daemon=True)
-    t.start()
-
-# Gunicorn imports "app" from this file, so we start the bot on import.
-start_bot()
+# ---- Auto-register webhook on startup ----
+@app.before_first_request
+def set_webhook():
+    render_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if render_url:
+        webhook_url = f"{render_url}/telegram"
+        requests.get(f"{BASE_URL}/setWebhook", params={"url": webhook_url})
