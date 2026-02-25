@@ -38,9 +38,11 @@ def health():
     return jsonify(status="healthy")
 
 # ---- Auto-register webhook on startup ----
-@app.before_first_request
+# ---- Auto-register webhook on startup ----
 def set_webhook():
     render_url = os.environ.get("RENDER_EXTERNAL_URL")
-    if render_url:
+    if render_url and TOKEN:
         webhook_url = f"{render_url}/telegram"
         requests.get(f"{BASE_URL}/setWebhook", params={"url": webhook_url})
+
+set_webhook()
